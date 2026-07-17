@@ -7,16 +7,25 @@ export const userInfoQuery = `
   }
 `;
 
-export const createContributedRepoQuery = (username: string) => `
+export const createContributedRepoQuery = (username: string, cursor?: string) => `
   query {
     user(login: "${username}") {
-      repositoriesContributedTo(last: 100, includeUserRepositories: true) {
+      repositoriesContributedTo(
+        first: 25
+        after: ${cursor ? JSON.stringify(cursor) : null}
+        includeUserRepositories: true
+        contributionTypes: [COMMIT]
+      ) {
         nodes {
           isFork
           name
           owner {
             login
           }
+        }
+        pageInfo {
+          endCursor
+          hasNextPage
         }
       }
     }

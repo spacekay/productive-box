@@ -22,10 +22,51 @@ interface RepoInfo {
   isFork: boolean;
 }
 
+interface PageInfo {
+  endCursor: string | null;
+  hasNextPage: boolean;
+}
+
 interface Edge {
   node: {
     committedDate: string;
   };
+}
+
+async function getContributedRepos(username: string): Promise<IRepo[]> {
+  const repos: IRepo[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const response = await githubQuery(createContributedRepoQuery(username, cursor));
+    const connection = response?.data?.user?.repositoriesContributedTo;
+    const nodes: RepoInfo[] = connection?.nodes ?? [];
+    const pageInfo: PageInfo = connection?.pageInfo ?? { endCursor: null, hasNextPage: false };
+
+    repos.push(
+      ...nodes.filter((repoInfo) => !repoInfo.isFork).map((repoInfo) => ({
+        name: repoInfo.name,
+        owner: repoInfo.owner.login,
+      })),
+    );
+
+    cursor = pageInfo.hasNextPage ? (pageInfo.endCursor ?? undefined) : undefined;
+    if (pageInfo.hasNextPage && !cursor) {
+      throw new Error('GitHub returned another repository page without a cursor');
+    }
+  } while (cursor);
+
+  return repos;
+}
+
+async function mapInBatches<T, R>(items: T[], batchSize: number, mapper: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+
+  for (let index = 0; index < items.length; index += batchSize) {
+    results.push(...(await Promise.all(items.slice(index, index + batchSize).map(mapper))));
+  }
+
+  return results;
 }
 
 (async () => {
@@ -38,29 +79,13 @@ interface Edge {
   /**
    * Second, get contributed repos
    */
-  const contributedRepoQuery = createContributedRepoQuery(username);
-  const repoResponse = await githubQuery(contributedRepoQuery);
-
-  /**
-   * If the token is invalid, stop the process
-   */
-  if (repoResponse.message === 'Bad credentials') {
-    console.error('Invalid GitHub token. Please renew the GH_TOKEN');
-    return;
-  }
-
-  const repos: IRepo[] = repoResponse?.data?.user?.repositoriesContributedTo?.nodes
-    .filter((repoInfo: RepoInfo) => !repoInfo?.isFork)
-    .map((repoInfo: RepoInfo) => ({
-      name: repoInfo?.name,
-      owner: repoInfo?.owner?.login,
-    }));
+  const repos = await getContributedRepos(username);
 
   /**
    * Third, get commit time and parse into commit-time/hour diagram
    */
-  const committedTimeResponseMap = await Promise.all(
-    repos.map(({ name, owner }) => githubQuery(createCommittedDateQuery(id, name, owner))),
+  const committedTimeResponseMap = await mapInBatches(repos, 5, ({ name, owner }) =>
+    githubQuery(createCommittedDateQuery(id, name, owner)),
   );
 
   let morning = 0; // 6 - 12
