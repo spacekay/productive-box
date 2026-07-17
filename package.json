@@ -9,14 +9,14 @@
     "preinstall": "./preinstall.sh",
     "dev": "node --loader ts-node/esm src/index.ts",
     "build": "tsc && ncc build dist/index.js --minify && find dist/ -type f -not -name 'index.js' -delete",
-    "lint": "biome lint"
+    "lint": "biome lint ."
   },
   "dependencies": {
     "@octokit/rest": "^20.0.2",
     "dotenv": "^16.4.4"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "devDependencies": {
     "@biomejs/biome": "1.5.3",

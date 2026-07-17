@@ -32,18 +32,14 @@ interface Edge {
   /**
    * First, get user id
    */
-  const userResponse = await githubQuery(userInfoQuery).catch((error) =>
-    console.error(`Unable to get username and id\n${error}`),
-  );
+  const userResponse = await githubQuery(userInfoQuery);
   const { login: username, id } = userResponse?.data?.viewer ?? {};
 
   /**
    * Second, get contributed repos
    */
   const contributedRepoQuery = createContributedRepoQuery(username);
-  const repoResponse = await githubQuery(contributedRepoQuery).catch((error) =>
-    console.error(`Unable to get the contributed repo\n${error}`),
-  );
+  const repoResponse = await githubQuery(contributedRepoQuery);
 
   /**
    * If the token is invalid, stop the process
@@ -65,9 +61,7 @@ interface Edge {
    */
   const committedTimeResponseMap = await Promise.all(
     repos.map(({ name, owner }) => githubQuery(createCommittedDateQuery(id, name, owner))),
-  ).catch((error) => console.error(`Unable to get the commit info\n${error}`));
-
-  if (!committedTimeResponseMap) return;
+  );
 
   let morning = 0; // 6 - 12
   let daytime = 0; // 12 - 18
@@ -146,4 +140,7 @@ interface Edge {
   });
 
   console.log('Success to update the gist 🎉');
-})();
+})().catch((error) => {
+  console.error(`Unable to update productive box: ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
+});

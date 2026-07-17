@@ -7,5 +7,15 @@ export default async function (query: string): Promise<any> {
     body: JSON.stringify({ query }).replace(/\\n/g, ''),
   });
 
-  return res.json();
+  const body = (await res.json()) as { errors?: unknown };
+
+  if (!res.ok) {
+    throw new Error(`GitHub GraphQL request failed (${res.status}): ${JSON.stringify(body)}`);
+  }
+
+  if (body.errors) {
+    throw new Error(`GitHub GraphQL request failed: ${JSON.stringify(body.errors)}`);
+  }
+
+  return body;
 }
