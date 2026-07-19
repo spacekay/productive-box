@@ -19,7 +19,11 @@ interface RepoInfo {
   owner: {
     login: string;
   };
-  isFork: boolean;
+}
+
+interface PageInfo {
+  endCursor: string | null;
+  hasNextPage: boolean;
 }
 
 interface Edge {
@@ -28,42 +32,31 @@ interface Edge {
   };
 }
 
-const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+/**
+ * The `repositoriesContributedTo` / `contributionsCollection` fields are now too
+ * expensive for large accounts (GitHub's GraphQL resource limits) and throw
+ * RESOURCE_LIMITS_EXCEEDED. Use the plain `viewer.repositories` connection
+ * (owned / collaborator / org repos, forks excluded) and paginate it instead.
+ */
+async function getContributedRepos(): Promise<IRepo[]> {
+  const repos: IRepo[] = [];
+  let cursor: string | undefined;
 
-async function getContributedRepos(username: string, createdAt: string): Promise<IRepo[]> {
-  const repoMap = new Map<string, IRepo>();
-  /**
-   * `contributionsCollection` covers at most one year per query, so walk backwards
-   * from now to the account creation date one year at a time and union the repos.
-   * Fall back to a single last-year window if `createdAt` is missing/invalid.
-   */
-  const parsedCreatedAt = new Date(createdAt);
-  const accountCreated = Number.isNaN(parsedCreatedAt.getTime())
-    ? new Date(Date.now() - ONE_YEAR_MS)
-    : parsedCreatedAt;
-  let windowEnd = new Date();
+  do {
+    const response = await githubQuery(createContributedRepoQuery(cursor));
+    const connection = response?.data?.viewer?.repositories;
+    const nodes: RepoInfo[] = connection?.nodes ?? [];
+    const pageInfo: PageInfo = connection?.pageInfo ?? { endCursor: null, hasNextPage: false };
 
-  while (windowEnd > accountCreated) {
-    const windowStart = new Date(Math.max(accountCreated.getTime(), windowEnd.getTime() - ONE_YEAR_MS));
+    repos.push(...nodes.map((repoInfo) => ({ name: repoInfo.name, owner: repoInfo.owner.login })));
 
-    const response = await githubQuery(
-      createContributedRepoQuery(username, windowStart.toISOString(), windowEnd.toISOString()),
-    );
-    const contributions: { repository: RepoInfo }[] =
-      response?.data?.user?.contributionsCollection?.commitContributionsByRepository ?? [];
-
-    for (const { repository } of contributions) {
-      if (repository.isFork) continue;
-      const key = `${repository.owner.login}/${repository.name}`;
-      if (!repoMap.has(key)) {
-        repoMap.set(key, { name: repository.name, owner: repository.owner.login });
-      }
+    cursor = pageInfo.hasNextPage ? (pageInfo.endCursor ?? undefined) : undefined;
+    if (pageInfo.hasNextPage && !cursor) {
+      throw new Error('GitHub returned another repository page without a cursor');
     }
+  } while (cursor);
 
-    windowEnd = windowStart;
-  }
-
-  return [...repoMap.values()];
+  return repos;
 }
 
 async function mapInBatches<T, R>(items: T[], batchSize: number, mapper: (item: T) => Promise<R>): Promise<R[]> {
@@ -81,12 +74,12 @@ async function mapInBatches<T, R>(items: T[], batchSize: number, mapper: (item: 
    * First, get user id
    */
   const userResponse = await githubQuery(userInfoQuery);
-  const { login: username, id, createdAt } = userResponse?.data?.viewer ?? {};
+  const { id } = userResponse?.data?.viewer ?? {};
 
   /**
    * Second, get contributed repos
    */
-  const repos = await getContributedRepos(username, createdAt);
+  const repos = await getContributedRepos();
 
   /**
    * Third, get commit time and parse into commit-time/hour diagram
