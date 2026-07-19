@@ -3,29 +3,23 @@ export const userInfoQuery = `
     viewer {
       login
       id
+      createdAt
     }
   }
 `;
 
-export const createContributedRepoQuery = (username: string, cursor?: string) => `
+export const createContributedRepoQuery = (username: string, from: string, to: string) => `
   query {
     user(login: "${username}") {
-      repositoriesContributedTo(
-        first: 25
-        after: ${cursor ? JSON.stringify(cursor) : null}
-        includeUserRepositories: true
-        contributionTypes: [COMMIT]
-      ) {
-        nodes {
-          isFork
-          name
-          owner {
-            login
+      contributionsCollection(from: "${from}", to: "${to}") {
+        commitContributionsByRepository(maxRepositories: 100) {
+          repository {
+            isFork
+            name
+            owner {
+              login
+            }
           }
-        }
-        pageInfo {
-          endCursor
-          hasNextPage
         }
       }
     }
