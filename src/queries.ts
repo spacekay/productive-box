@@ -12,8 +12,7 @@ export const createContributedRepoQuery = (cursor?: string) => `
       repositories(
         first: 100
         after: ${cursor ? JSON.stringify(cursor) : null}
-        ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]
-        isFork: false
+        ownerAffiliations: [OWNER]
         orderBy: { field: PUSHED_AT, direction: DESC }
       ) {
         nodes {

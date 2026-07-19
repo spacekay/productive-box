@@ -36,7 +36,7 @@ interface Edge {
  * The `repositoriesContributedTo` / `contributionsCollection` fields are now too
  * expensive for large accounts (GitHub's GraphQL resource limits) and throw
  * RESOURCE_LIMITS_EXCEEDED. Use the plain `viewer.repositories` connection
- * (owned / collaborator / org repos, forks excluded) and paginate it instead.
+ * (repos the user owns, forks included) and paginate it instead.
  */
 async function getContributedRepos(): Promise<IRepo[]> {
   const repos: IRepo[] = [];
